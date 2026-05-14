@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PRP-13017 · Bulk Edit Channel Visibility</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <style>
+    /* === CSS VARIABLES === */
+    :root {
+      --bg:           #070d19;
+      --surface:      rgba(255,255,255,0.04);
+      --surface-hi:   rgba(255,255,255,0.07);
+      --border:       rgba(255,255,255,0.09);
+      --border-acc:   rgba(0,201,177,0.28);
+      --accent:       #00c9b1;
+      --accent-br:    #2ee8d3;
+      --accent-dim:   rgba(0,201,177,0.11);
+      --text-1:       #edf2f7;
+      --text-2:       #94a3b8;
+      --text-3:       #475569;
+      --green:        #34d399;
+      --green-dim:    rgba(52,211,153,0.12);
+      --yellow:       #fbbf24;
+      --yellow-dim:   rgba(251,191,36,0.1);
+      --red:          #f87171;
+      --ff-head:      'Bricolage Grotesque', system-ui, sans-serif;
+      --ff-body:      'DM Sans', system-ui, sans-serif;
+      --r:            12px;
+      --r-sm:         8px;
+    }
+
+    /* === RESET === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body {
+      background: var(--bg);
+      color: var(--text-1);
+      font-family: var(--ff-body);
+      overflow: hidden;
+      height: 100vh;
+      height: 100dvh;
+    }
+
+    /* === VIEWPORT BASE — every slide must fit 100vh, no scroll === */
+    .slide {
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      position: relative;
+      display: none;
+      flex-direction: column;
+    }
+    .slide.active { display: flex; }
+
+    /* subtle grid background applied to all slides */
+    .slide::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -5%, rgba(0,201,177,0.1), transparent),
+        linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+      background-size: auto, 32px 32px, 32px 32px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .slide > * { position: relative; z-index: 1; }
+
+    /* === TYPOGRAPHY === */
+    h1, h2, h3 { font-family: var(--ff-head); }
+
+    /* === SLIDE ENTER ANIMATIONS === */
+    @keyframes fadeUp  { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes scaleIn { from { opacity:0; transform:scale(0.88);      } to { opacity:1; transform:scale(1);    } }
+
+    .reveal { opacity: 0; }
+    .slide.active .reveal   { animation: fadeUp 0.48s ease-out forwards; }
+    .slide.active .r1 { animation-delay: 0.04s; }
+    .slide.active .r2 { animation-delay: 0.13s; }
+    .slide.active .r3 { animation-delay: 0.22s; }
+    .slide.active .r4 { animation-delay: 0.31s; }
+    .slide.active .r5 { animation-delay: 0.40s; }
+    .slide.active .r6 { animation-delay: 0.49s; }
+    .slide.active .scale-in { animation: scaleIn 0.45s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .scale-in { opacity:1 !important; animation: none !important; }
+    }
+
+    /* === INNER LAYOUT === */
+    .inner {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: clamp(20px,3.5vh,44px) clamp(24px,5vw,80px);
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* === SHARED TEXT STYLES === */
+    .eyebrow {
+      font-size: clamp(10px,1vw,12px);
+      font-weight: 600;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: clamp(8px,1.2vh,14px);
+    }
+    .h-slide {
+      font-family: var(--ff-head);
+      font-size: clamp(26px,4vw,48px);
+      font-weight: 800;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      color: var(--text-1);
+    }
+    .subtitle {
+      font-size: clamp(13px,1.4vw,16px);
+      color: var(--text-2);
+      margin-top: clamp(8px,1vh,12px);
+      line-height: 1.65;
+      max-width: 700px;
+    }
+
+    /* === BADGE === */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: clamp(10px,1vw,12px);
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      padding: 4px 12px;
+      border-radius: 100px;
+      border: 1px solid;
+    }
+    .badge-teal   { color: var(--accent);    border-color: var(--border-acc); background: var(--accent-dim); }
+    .badge-slate  { color: var(--text-2);    border-color: var(--border);     background: var(--surface);    font-family: monospace; text-transform: none; letter-spacing: 0.05em; }
+    .badge-green  { color: var(--green);     border-color: rgba(52,211,153,0.3); background: var(--green-dim); }
+
+    /* === NAV CHROME === */
+    #progress {
+      position: fixed; top: 0; left: 0; height: 2px; z-index: 200;
+      background: linear-gradient(90deg, var(--accent), var(--accent-br));
+      transition: width 0.35s ease;
+    }
+    #counter {
+      position: fixed; top: clamp(10px,1.5vh,18px); right: clamp(16px,2vw,32px);
+      font-size: 11px; color: var(--text-3); letter-spacing: 0.09em; z-index: 200;
+    }
+    #dots {
+      position: fixed; bottom: clamp(14px,2.2vh,22px); left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 8px; z-index: 200;
+    }
+    .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: rgba(255,255,255,0.18); cursor: pointer;
+      border: none; transition: all 0.25s ease;
+    }
+    .dot.active { background: var(--accent); transform: scale(1.5); }
+
+    /* ================================ */
+    /* SLIDE 1 — TITLE                  */
+    /* ================================ */
+    #s1 { justify-content: center; }
+    #s1::before {
+      background-image:
+        radial-gradient(ellipse 65% 65% at 50% 50%, rgba(0,201,177,0.13), transparent),
+        radial-gradient(ellipse 35% 35% at 80% 15%, rgba(0,100,180,0.08), transparent),
+        linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+      background-size: auto, auto, 32px 32px, 32px 32px;
+    }
+    .t-badges { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: clamp(16px,2.5vh,24px); }
+    .t-headline {
+      font-family: var(--ff-head);
+      font-size: clamp(38px,6.5vw,76px);
+      font-weight: 800;
+      line-height: 1.0;
+      letter-spacing: -0.03em;
+      color: var(--text-1);
+    }
+    .t-headline .hl { color: var(--accent); }
+    .t-meta {
+      margin-top: clamp(18px,2.5vh,28px);
+      display: flex; align-items: center; gap: clamp(12px,1.5vw,20px); flex-wrap: wrap;
+    }
+    .t-meta-item {
+      display: flex; align-items: center; gap: 7px;
+      font-size: clamp(12px,1.2vw,14px); color: var(--text-2);
+    }
+    .t-meta-item.pos { color: var(--green); font-weight: 600; }
+    .t-sep { width: 4px; height: 4px; border-radius: 50%; background: var(--text-3); }
+
+    /* ================================ */
+    /* SLIDE 2 — WHAT WE SHIPPED        */
+    /* ================================ */
+    .feat-grid {
+      display: grid; grid-template-columns: repeat(3,1fr);
+      gap: clamp(12px,1.5vw,20px);
+      margin-top: clamp(18px,2.5vh,28px);
+      flex: 1;
+    }
+    .feat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: clamp(16px,2.2vh,26px) clamp(16px,1.8vw,22px);
+      display: flex; flex-direction: column; gap: clamp(10px,1.5vh,16px);
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .feat-card:hover { border-color: var(--border-acc); background: var(--surface-hi); }
+    .feat-icon {
+      width: clamp(34px,3.5vw,42px); height: clamp(34px,3.5vw,42px);
+      border-radius: 10px;
+      background: var(--accent-dim); border: 1px solid var(--border-acc);
+      display: flex; align-items: center; justify-content: center;
+      font-size: clamp(16px,2vw,22px);
+    }
+    .feat-name {
+      font-family: var(--ff-head);
+      font-size: clamp(13px,1.4vw,17px);
+      font-weight: 700; line-height: 1.3; color: var(--text-1);
+    }
+    .feat-desc {
+      font-size: clamp(11px,1.1vw,13px);
+      color: var(--text-2); line-height: 1.65;
+    }
+
+    /* ================================ */
+    /* SLIDE 3 — BEFORE / AFTER         */
+    /* ================================ */
+    .ba-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: clamp(14px,1.8vw,24px);
+      margin-top: clamp(18px,2.5vh,28px);
+      flex: 1;
+    }
+    .ba-card {
+      border-radius: var(--r);
+      padding: clamp(18px,2.8vh,32px) clamp(18px,2.2vw,28px);
+      display: flex; flex-direction: column; gap: clamp(10px,1.5vh,16px);
+    }
+    .ba-before { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); }
+    .ba-after  { background: rgba(0,201,177,0.055);   border: 1px solid rgba(0,201,177,0.2); }
+    .ba-head {
+      font-size: clamp(10px,1vw,12px);
+      font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .ba-before .ba-head { color: var(--text-3); }
+    .ba-after  .ba-head { color: var(--accent); }
+    .ba-pt {
+      display: flex; align-items: flex-start; gap: 10px;
+      font-size: clamp(12px,1.25vw,15px); color: var(--text-2); line-height: 1.55;
+    }
+    .ba-before .ba-pt::before { content: '✗'; color: #475569; flex-shrink:0; margin-top:1px; }
+    .ba-after  .ba-pt::before { content: '✓'; color: var(--accent); flex-shrink:0; margin-top:1px; font-weight:700; }
+
+    /* ================================ */
+    /* SLIDE 4 — KPIs                   */
+    /* ================================ */
+    .kpi-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: clamp(12px,1.5vw,20px);
+      margin-top: clamp(18px,2.5vh,28px);
+      flex: 1;
+    }
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: clamp(18px,2.8vh,32px) clamp(20px,2.5vw,28px);
+      display: flex; flex-direction: column; justify-content: center;
+    }
+    .kpi-card.hi { background: var(--accent-dim); border-color: var(--border-acc); }
+    .kpi-lbl {
+      font-size: clamp(10px,1vw,12px);
+      font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3);
+    }
+    .kpi-val {
+      font-family: var(--ff-head);
+      font-size: clamp(34px,5vw,58px);
+      font-weight: 800; line-height: 1; letter-spacing: -0.03em;
+      margin-top: clamp(8px,1.2vh,14px);
+      color: var(--text-1);
+    }
+    .kpi-val.pos { color: var(--green); }
+    .kpi-val.acc { color: var(--accent-br); }
+    .kpi-sub {
+      font-size: clamp(11px,1.1vw,13px);
+      color: var(--text-3); margin-top: clamp(5px,0.8vh,8px); line-height: 1.4;
+    }
+
+    /* ================================ */
+    /* SLIDES 5 & 6 — CHARTS            */
+    /* ================================ */
+    .chart-wrap {
+      flex: 1; min-height: 0;
+      margin-top: clamp(10px,1.5vh,16px);
+      border-radius: var(--r);
+      background: var(--surface); border: 1px solid var(--border);
+      padding: clamp(10px,1.2vh,14px);
+      overflow: hidden;
+    }
+    .chart-div { width: 100%; height: 100%; min-height: 220px; }
+    .chart-hint {
+      font-size: clamp(10px,0.9vw,11px);
+      color: var(--text-3); text-align: right; font-style: italic;
+      margin-top: clamp(5px,0.7vh,8px);
+    }
+
+    /* ================================ */
+    /* SLIDE 7 — SIGNAL READING         */
+    /* ================================ */
+    .sig-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: clamp(12px,1.5vw,18px);
+      margin-top: clamp(16px,2.2vh,24px);
+      flex: 1;
+    }
+    .sig-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: clamp(14px,2vh,22px) clamp(14px,1.8vw,20px);
+      display: flex; flex-direction: column; gap: clamp(7px,1vh,11px);
+    }
+    .sig-card.pos  { background: var(--green-dim);  border-color: rgba(52,211,153,0.25); }
+    .sig-card.warn { background: var(--yellow-dim); border-color: rgba(251,191,36,0.25); }
+    .sig-tag {
+      font-size: clamp(10px,0.9vw,11px);
+      font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+    }
+    .sig-card.pos  .sig-tag { color: var(--green); }
+    .sig-card.warn .sig-tag { color: var(--yellow); }
+    .sig-card:not(.pos):not(.warn) .sig-tag { color: var(--accent); }
+    .sig-big {
+      font-family: var(--ff-head);
+      font-size: clamp(22px,2.8vw,32px);
+      font-weight: 700; color: var(--text-1);
+    }
+    .sig-body {
+      font-size: clamp(12px,1.2vw,14px);
+      color: var(--text-2); line-height: 1.6;
+    }
+    .disclaimer {
+      margin-top: clamp(10px,1.5vh,16px);
+      padding: clamp(8px,1.2vh,12px) clamp(12px,1.5vw,16px);
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: clamp(10px,0.9vw,12px);
+      color: var(--text-3); font-style: italic; text-align: center;
+    }
+
+    /* === HEIGHT BREAKPOINTS === */
+    @media (max-height: 700px) {
+      .feat-card, .ba-card, .kpi-card, .sig-card { padding: 12px 14px; gap: 8px; }
+      .kpi-val { font-size: clamp(28px,4vw,44px); }
+      .ba-grid, .feat-grid, .kpi-grid, .sig-grid { margin-top: 12px; gap: 10px; }
+    }
+    @media (max-height: 600px) {
+      .inner { padding: 14px 24px; }
+      .t-headline { font-size: clamp(28px,5vw,52px); }
+    }
+    @media (max-height: 500px) {
+      .inner { padding: 10px 20px; }
+      .feat-icon { width: 28px; height: 28px; font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- === NAV CHROME === -->
+<div id="progress" style="width:0%"></div>
+<div id="counter">1 / 7</div>
+<div id="dots"></div>
+
+<!-- ================================ -->
+<!-- SLIDE 1 · TITLE                  -->
+<!-- ================================ -->
+<section class="slide active" id="s1">
+  <div class="inner" style="justify-content:center;">
+    <div class="t-badges reveal r1">
+      <span class="badge badge-teal">Rolled out</span>
+      <span class="badge badge-slate">PRP-13017</span>
+    </div>
+    <h1 class="t-headline reveal r2">
+      Bulk edit<br /><span class="hl">channel visibility</span>
+    </h1>
+    <p class="subtitle reveal r3">
+      Support impact readout — US&amp;C Zendesk weekly ticket analysis
+    </p>
+    <div class="t-meta reveal r4">
+      <span class="t-meta-item">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Released 2026-04-06
+      </span>
+      <span class="t-sep"></span>
+      <span class="t-meta-item">5 weeks post-launch</span>
+      <span class="t-sep"></span>
+      <span class="t-meta-item pos">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        −9.7% ticket delta
+      </span>
+    </div>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 2 · WHAT WE SHIPPED        -->
+<!-- ================================ -->
+<section class="slide" id="s2">
+  <div class="inner">
+    <p class="eyebrow reveal r1">What we shipped</p>
+    <h2 class="h-slide reveal r2">Three new capabilities</h2>
+    <div class="feat-grid">
+      <div class="feat-card reveal r3">
+        <div class="feat-icon">👁</div>
+        <div class="feat-name">At-a-glance channel column</div>
+        <div class="feat-desc">An "Offered on" column with channel logos now appears on Items, Categories, Menus, and Modifier Groups — channel status visible without drilling in.</div>
+      </div>
+      <div class="feat-card reveal r4">
+        <div class="feat-icon">✏️</div>
+        <div class="feat-name">Bulk visibility edit modal</div>
+        <div class="feat-desc">Select multiple entities, open "Edit channel visibility" from the bulk bar overflow, and toggle channels across the entire selection in a single modal.</div>
+      </div>
+      <div class="feat-card reveal r5">
+        <div class="feat-icon">🔍</div>
+        <div class="feat-name">Audit without opening items</div>
+        <div class="feat-desc">Inspect which channels each entity is enabled or disabled on directly from the list view — no per-item navigation, no scrolling through individual records.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 3 · BEFORE / AFTER         -->
+<!-- ================================ -->
+<section class="slide" id="s3">
+  <div class="inner">
+    <p class="eyebrow reveal r1">The change</p>
+    <h2 class="h-slide reveal r2">Before &amp; after</h2>
+    <div class="ba-grid">
+      <div class="ba-card ba-before reveal r3">
+        <div class="ba-head">Before</div>
+        <div class="ba-pt">Open each entity individually to discover or change service visibility across channels</div>
+        <div class="ba-pt">Slow and error-prone at scale — especially across many items and channels</div>
+        <div class="ba-pt">Frequent CS-assisted bulk changes when operators couldn't self-serve</div>
+      </div>
+      <div class="ba-card ba-after reveal r4">
+        <div class="ba-head">After</div>
+        <div class="ba-pt">List views surface channel assignment at a glance in the "Offered on" column</div>
+        <div class="ba-pt">Bulk apply visibility changes across an entire selection in one flow</div>
+        <div class="ba-pt">Operators self-serve what previously required a CS escalation</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 4 · KPI SCORECARD          -->
+<!-- ================================ -->
+<section class="slide" id="s4">
+  <div class="inner">
+    <p class="eyebrow reveal r1">Key metrics</p>
+    <h2 class="h-slide reveal r2">Post-launch snapshot · 5 weeks</h2>
+    <div class="kpi-grid">
+      <div class="kpi-card reveal r3">
+        <div class="kpi-lbl">Pre-release avg</div>
+        <div class="kpi-val">30.8</div>
+        <div class="kpi-sub">tickets / week · last 5 weeks before release</div>
+      </div>
+      <div class="kpi-card reveal r4">
+        <div class="kpi-lbl">Post-launch avg</div>
+        <div class="kpi-val">27.8</div>
+        <div class="kpi-sub">tickets / week · all complete post weeks</div>
+      </div>
+      <div class="kpi-card hi reveal r5">
+        <div class="kpi-lbl">Delta vs baseline</div>
+        <div class="kpi-val pos">−9.7%</div>
+        <div class="kpi-sub">primary slice / week</div>
+      </div>
+      <div class="kpi-card reveal r6">
+        <div class="kpi-lbl">Weeks since release</div>
+        <div class="kpi-val acc">5</div>
+        <div class="kpi-sub">weeks in post window</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 5 · WEEKLY VOLUME CHART    -->
+<!-- ================================ -->
+<section class="slide" id="s5">
+  <div class="inner">
+    <p class="eyebrow reveal r1">Volume trend</p>
+    <h2 class="h-slide reveal r2" style="font-size:clamp(20px,3vw,34px);">Weekly created ticket volume</h2>
+    <div class="chart-wrap reveal r3">
+      <div id="chart1" class="chart-div"></div>
+    </div>
+    <p class="chart-hint reveal r4">Legend: click series to show/hide · drag range slider to zoom</p>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 6 · NORMALIZED INTENSITY   -->
+<!-- ================================ -->
+<section class="slide" id="s6">
+  <div class="inner">
+    <p class="eyebrow reveal r1">Normalized intensity</p>
+    <h2 class="h-slide reveal r2" style="font-size:clamp(20px,3vw,34px);">Tickets per 1k Menu Management orgs</h2>
+    <div class="chart-wrap reveal r3">
+      <div id="chart2" class="chart-div"></div>
+    </div>
+    <p class="chart-hint reveal r4">Primary slice tickets per 1k entitled orgs (weekly snapshot)</p>
+  </div>
+</section>
+
+<!-- ================================ -->
+<!-- SLIDE 7 · READING THE SIGNAL     -->
+<!-- ================================ -->
+<section class="slide" id="s7">
+  <div class="inner">
+    <p class="eyebrow reveal r1">Reading the signal</p>
+    <h2 class="h-slide reveal r2">Interpretation &amp; caveats</h2>
+    <div class="sig-grid">
+      <div class="sig-card pos reveal r3">
+        <div class="sig-tag">Delta</div>
+        <div class="sig-big">−9.7%</div>
+        <div class="sig-body">Fewer tickets in the 5 post-launch weeks vs. the matched pre-release window — directionally positive.</div>
+      </div>
+      <div class="sig-card warn reveal r4">
+        <div class="sig-tag">Confidence</div>
+        <div class="sig-big">Low</div>
+        <div class="sig-body">Proxy metric + concurrent Q2 menu releases make it hard to isolate PRP-13017's specific contribution short-term.</div>
+      </div>
+      <div class="sig-card reveal r5">
+        <div class="sig-tag">Watch medium-term</div>
+        <div class="sig-body">If self-serve bulk edits replace CS loops, expect a continued modest downward trend and fewer escalations about wrong-channel availability.</div>
+      </div>
+      <div class="sig-card reveal r6">
+        <div class="sig-tag">Proxy note</div>
+        <div class="sig-body">Menu Management :: Add Remove Or Edit Items serves as proxy — no dedicated channel-visibility SOS exists in the top CSR taxonomy.</div>
+      </div>
+    </div>
+    <div class="disclaimer reveal r6">
+      Correlational read — this data does not prove PRP-13017 causality.
+    </div>
+  </div>
+</section>
+
+<!-- === EMBEDDED DATA === -->
+<script id="app-data" type="application/json">
+{"dates":["2024-12-30","2025-01-06","2025-01-13","2025-01-20","2025-01-27","2025-02-03","2025-02-10","2025-02-17","2025-02-24","2025-03-03","2025-03-10","2025-03-17","2025-03-24","2025-03-31","2025-04-07","2025-04-14","2025-04-21","2025-04-28","2025-05-05","2025-05-12","2025-05-19","2025-05-26","2025-06-02","2025-06-09","2025-06-16","2025-06-23","2025-06-30","2025-07-07","2025-07-14","2025-07-21","2025-07-28","2025-08-04","2025-08-11","2025-08-18","2025-08-25","2025-09-01","2025-09-08","2025-09-15","2025-09-22","2025-09-29","2025-10-06","2025-10-13","2025-10-20","2025-10-27","2025-11-03","2025-11-10","2025-11-17","2025-11-24","2025-12-01","2025-12-08","2025-12-15","2025-12-22","2025-12-29","2026-01-05","2026-01-12","2026-01-19","2026-01-26","2026-02-02","2026-02-09","2026-02-16","2026-02-23","2026-03-02","2026-03-09","2026-03-16","2026-03-23","2026-03-30","2026-04-06","2026-04-13","2026-04-20","2026-04-27","2026-05-04"],"tax":[24,81,83,61,51,61,71,54,64,53,60,64,79,66,56,59,46,59,52,37,42,61,77,88,59,120,82,77,64,53,77,56,56,49,71,68,67,76,63,71,71,50,89,68,77,49,47,41,60,48,45,36,41,47,28,48,36,49,38,31,39,23,33,40,29,29,35,42,17,21,24],"menu":[263,421,369,314,307,341,362,289,271,313,312,283,303,309,273,288,233,267,261,241,232,244,293,274,220,295,386,255,259,219,276,242,226,236,310,295,249,267,242,276,241,259,338,281,246,219,193,348,211,180,215,283,240,193,162,250,205,247,225,189,204,221,232,210,189,212,190,184,175,168,187],"taxYoy":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,24.0,81.0,83.0,61.0,51.0,61.0,71.0,54.0,64.0,53.0,60.0,64.0,79.0,66.0,56.0,59.0,46.0,59.0,52.0],"menuYoy":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,263.0,421.0,369.0,314.0,307.0,341.0,362.0,289.0,271.0,313.0,312.0,283.0,303.0,309.0,273.0,288.0,233.0,267.0,261.0],"taxPer1k":[1.7829284599955426,6.035317785559943,6.192181438376604,4.542746499851058,3.7828215398308855,4.5539380365808135,5.278810408921933,3.9624302905782214,4.677336841335964,3.868895539820425,4.374453193350831,4.653868528214078,5.715525973086384,4.764998917045701,4.037782103972889,4.231817529766174,3.285244965004999,4.206473691715385,3.711104767342278,2.6269080582179622,2.9711375212224107,4.294262583597325,5.398962277380452,6.156860001399286,4.264854705797311,8.63060989643268,5.863425098319628,5.495681964171008,4.549331816889395,3.745847763092798,5.41795665634675,3.9764254775260954,3.9548022598870056,3.447548019418842,4.963299545613422,4.765241765942537,4.706047622392358,5.433228481555619,4.48654037886341,5.0308226457875715,5.034746844419232,3.521622763769545,6.257470294593264,4.774275082496665,5.389137737961926,3.412731578214236,3.2609449802261845,2.835408022130014,4.154261580004154,3.3023735810113517,3.0798713298199987,2.453820462136187,2.7965350248959826,3.2062214339313733,1.8999796430752527,3.2460945425035503,2.4271844660194173,3.2985526758667114,2.6232224216484883,2.1288284576294467,2.6876162910895185,1.5806473781870662,2.2548684660061498,2.712783994574432,1.9566830848120909,1.9481391911863495,2.3408239700374533,2.791254070578853,1.1233727615145708,1.375876302168643,1.564435173717489],"taxPer1kYoy":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,1.6369961121342336,5.525615662732792,5.632082513401643,4.125245147764929,3.4385113268608416,4.106361494446315,4.901283998343228,3.708281829419036,4.410447246916132,3.6423613497354133,4.099760847283909,4.340454391319091,5.330274610350179,4.433696090286175,3.745318352059925,3.9210473848607696,3.039714531157074,3.8655572299023784,3.3896095430545596],"release":"2026-04-06"}
+</script>
+
+<script>
+  /* === NAVIGATION === */
+  const slides = [...document.querySelectorAll('.slide')];
+  const N = slides.length;
+  let cur = 0;
+  let chart1Done = false, chart2Done = false;
+
+  function goTo(n) {
+    n = Math.max(0, Math.min(n, N - 1));
+    slides[cur].classList.remove('active');
+    cur = n;
+    slides[cur].classList.add('active');
+    sync();
+    if (cur === 4 && !chart1Done) { chart1Done = true; initChart1(); }
+    if (cur === 5 && !chart2Done) { chart2Done = true; initChart2(); }
+  }
+
+  function sync() {
+    document.getElementById('counter').textContent = `${cur + 1} / ${N}`;
+    document.getElementById('progress').style.width = `${((cur + 1) / N) * 100}%`;
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === cur));
+  }
+
+  /* build nav dots */
+  const dotsEl = document.getElementById('dots');
+  for (let i = 0; i < N; i++) {
+    const b = document.createElement('button');
+    b.className = 'dot' + (i === 0 ? ' active' : '');
+    b.setAttribute('aria-label', `Slide ${i + 1}`);
+    b.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(b);
+  }
+  sync();
+
+  /* keyboard */
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown',' '].includes(e.key)) { e.preventDefault(); goTo(cur + 1); }
+    if (['ArrowLeft','ArrowUp'].includes(e.key)) { e.preventDefault(); goTo(cur - 1); }
+  });
+
+  /* touch swipe */
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener('touchend', e => {
+    const dx = tx - e.changedTouches[0].clientX;
+    if (Math.abs(dx) > 50) goTo(dx > 0 ? cur + 1 : cur - 1);
+  });
+
+  /* scroll wheel */
+  let wCool = false;
+  document.addEventListener('wheel', e => {
+    if (wCool) return;
+    wCool = true;
+    goTo(e.deltaY > 0 ? cur + 1 : cur - 1);
+    setTimeout(() => { wCool = false; }, 750);
+  }, { passive: true });
+
+  /* === CHART DATA === */
+  const D = JSON.parse(document.getElementById('app-data').textContent);
+
+  const baseOpt = {
+    backgroundColor: 'transparent',
+    textStyle: { fontFamily: "'DM Sans', system-ui, sans-serif", color: '#64748b' },
+    tooltip: {
+      trigger: 'axis',
+      backgroundColor: 'rgba(7,13,25,0.95)',
+      borderColor: 'rgba(255,255,255,0.1)',
+      borderWidth: 1,
+      textStyle: { color: '#e2e8f0', fontSize: 12 },
+      axisPointer: { type: 'cross', crossStyle: { color: '#334155' } },
+    },
+    legend: {
+      textStyle: { color: '#94a3b8', fontSize: 12 },
+      inactiveColor: '#1e293b',
+      type: 'scroll', top: 4, right: 8,
+    },
+    grid: { left: 50, right: 20, top: 48, bottom: 56, containLabel: false },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: D.dates,
+      axisLine: { lineStyle: { color: '#1e293b' } },
+      axisLabel: { color: '#475569', fontSize: 11 },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: 'value',
+      axisLine: { show: false },
+      axisLabel: { color: '#475569', fontSize: 11 },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)', type: 'dashed' } },
+    },
+    dataZoom: [{
+      type: 'slider',
+      start: 0, end: 100,
+      height: 18, bottom: 6,
+      borderColor: 'transparent',
+      backgroundColor: 'rgba(15,23,42,0.9)',
+      fillerColor: 'rgba(0,201,177,0.18)',
+      handleStyle: { color: '#00c9b1', borderColor: '#00c9b1' },
+      textStyle: { color: '#475569', fontSize: 10 },
+    }],
+  };
+
+  const releaseMarkLine = {
+    symbol: 'none',
+    label: { show: true, formatter: 'Release', color: '#f87171', fontSize: 11, fontWeight: 600 },
+    lineStyle: { color: '#f87171', width: 1.5, type: 'dashed' },
+    data: [{ xAxis: D.release }],
+  };
+
+  const areaGradient = (color) => ({
+    type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+    colorStops: [
+      { offset: 0, color: color.replace(')', ',0.2)').replace('rgb', 'rgba') },
+      { offset: 1, color: color.replace(')', ',0)').replace('rgb', 'rgba') },
+    ],
+  });
+
+  function initChart1() {
+    const c = echarts.init(document.getElementById('chart1'), null, { renderer: 'canvas' });
+    c.setOption({
+      ...baseOpt,
+      animationDuration: 1000,
+      series: [
+        {
+          name: 'Primary slice', type: 'line', smooth: 0.35,
+          showSymbol: true, symbolSize: 4,
+          lineStyle: { width: 2.5, color: '#00c9b1' },
+          itemStyle: { color: '#00c9b1' },
+          areaStyle: { color: { type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(0,201,177,0.18)'},{offset:1,color:'rgba(0,201,177,0)'}] } },
+          data: D.tax,
+          markLine: releaseMarkLine,
+        },
+        {
+          name: 'Menu slice', type: 'line', smooth: 0.35, showSymbol: false,
+          lineStyle: { width: 1.5, color: '#334155', type: 'dotted' },
+          itemStyle: { color: '#334155' },
+          data: D.menu,
+        },
+        {
+          name: 'Primary YoY', type: 'line', smooth: 0.35, showSymbol: false,
+          lineStyle: { width: 1.5, color: '#2dd4bf', type: 'dashed' },
+          itemStyle: { color: '#2dd4bf' },
+          data: D.taxYoy,
+        },
+        {
+          name: 'Menu YoY', type: 'line', smooth: 0.35, showSymbol: false,
+          lineStyle: { width: 1.2, color: '#1e293b', type: 'dashed' },
+          itemStyle: { color: '#1e293b' },
+          data: D.menuYoy,
+        },
+      ],
+    });
+    window.addEventListener('resize', () => c.resize());
+    setTimeout(() => c.resize(), 60);
+  }
+
+  function initChart2() {
+    const c = echarts.init(document.getElementById('chart2'), null, { renderer: 'canvas' });
+    c.setOption({
+      ...baseOpt,
+      animationDuration: 1000,
+      series: [
+        {
+          name: 'Primary / 1k orgs', type: 'line', smooth: 0.35,
+          showSymbol: true, symbolSize: 4,
+          lineStyle: { width: 2.5, color: '#00c9b1' },
+          itemStyle: { color: '#00c9b1' },
+          areaStyle: { color: { type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(0,201,177,0.18)'},{offset:1,color:'rgba(0,201,177,0)'}] } },
+          data: D.taxPer1k,
+          markLine: releaseMarkLine,
+        },
+        {
+          name: 'Primary / 1k YoY', type: 'line', smooth: 0.35, showSymbol: false,
+          lineStyle: { width: 1.5, color: '#2dd4bf', type: 'dashed' },
+          itemStyle: { color: '#2dd4bf' },
+          data: D.taxPer1kYoy,
+        },
+      ],
+    });
+    window.addEventListener('resize', () => c.resize());
+    setTimeout(() => c.resize(), 60);
+  }
+</script>
+</body>
+</html>
